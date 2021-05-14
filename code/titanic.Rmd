@@ -25,9 +25,10 @@ knitr::opts_chunk$set(echo = TRUE)
 ---
 
 
-```{r message= FALSE, warning=FALSE, fig.height=6, fig.width=12}
+```{r message= FALSE, warning=FALSE}
 require(tidyverse)
 require(lares)
+require(GGally)
 require(knitr)
 require(kableExtra)
 require(gridExtra)
@@ -55,15 +56,96 @@ df$Embarked <- factor(df$Embarked)
 summary(df)
 df_str(df)
 
+
 ```
+Creamos la variable dicotómica Child para diferenciar los niños de los adultos (>12años).  
+
+Separamos del `Name` el título (`title_name`) y el primer apellido (`first_name`).  
 
 # Integración y selección de los datos de interés a analizar. 
-    
+
+```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12}
+
+df <- df %>%
+  mutate(Child=factor(Age<=12))
+
+df <- df %>%
+  separate(Name, c('first_name', 'rest_name'), sep=', ', remove=F) %>%
+  separate(rest_name, c('title_name', 'rest_name'), sep='\\.') %>%
+  select(-rest_name)
+
+df %>%
+  select(where(is.factor)) %>%
+  na.omit() %>%
+  pivot_longer(-Survived) %>%
+  group_by(name, value, Survived) %>%
+  summarize(n=n()) %>%
+  mutate(prop=prop.table(n)) %>%
+  pivot_longer(c(n,prop), names_to='tipo', values_to='val') %>%
+  ggplot(aes(x=interaction(name,value, lex.order = T), y=val, fill=Survived)) + 
+    geom_bar(stat='identity', position='stack') +
+    facet_grid(tipo ~ ., scale='free_y') +
+    theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1))
+
+df %>% 
+  select(Survived, where(is.numeric), -PassengerId) %>%
+  ggpairs(aes(color=Survived))
+
+```
 
 
 # Limpieza de los datos.  
 
 ## ¿Los datos contienen ceros o elementos vacíos? ¿Cómo gestionarías cada uno de estos casos?  
+
+Sustituimos los NA's de la variable Child con los siguientes criterios:
+
+|     Asumimos que los viajeros con ticket unipersonal con SibSp==0 (sin hermanos o esposa a bordo) y Parch==0 (sin hermanos o padres a bordo) no son niños.
+
+|     Asumimos que las personas con title_name=='Mrs' (mujeres casadas) no son niños.  
+
+|     Asumimos que las personas con title_name=='Master' son niños.  
+
+|     Asumimos que las personas con SibSp>0 y Parch>0  son niños.  
+
+
+
+```{r message= FALSE, warning=FALSE}
+
+df %>%
+  group_by(Ticket) %>%
+  summarize(n_ticket=n()) %>%
+  filter(n_ticket==1) %>%
+  select(Ticket) -> tmp
+
+left_join(tmp, df) %>%
+  filter(SibSp==0, Parch==0, is.na(Age)) %>%
+  select(PassengerId) -> tmp
+
+df$Child[df$PassengerId %in% tmp$PassengerId] <- FALSE
+
+df %>%
+  filter(is.na(Child)) %>%
+  filter(grepl('Mrs', Name)) %>%
+  select(PassengerId) -> tmp
+
+df$Child[df$PassengerId %in% tmp$PassengerId] <- FALSE
+
+df$Child[df$title_name=='Master'] <- TRUE
+
+df %>%
+  filter(is.na(Child)) %>%
+  filter(SibSp > '0', Parch > '0') %>%
+  select(PassengerId) -> tmp
+
+df$Child[df$PassengerId %in% tmp$PassengerId] <- TRUE
+
+df$Child[is.na(df$Child)] <- FALSE
+
+ prop.table(table(df$Survived, df$Child, dnn=c('Survived', 'Child?')), margin=2)
+
+```
+
 
 ## Identificación y tratamiento de valores extremos.  
 
