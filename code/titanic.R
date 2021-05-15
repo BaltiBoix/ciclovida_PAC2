@@ -1,41 +1,42 @@
 require(tidyverse)
 require(GGally)
+require(DescTools)
+require(kableExtra)
+
 
 df <- read_csv('data/train.csv')
 
 summary(df)
 
 df$Survived <- factor(df$Survived)
-df$Pclass <- factor(df$Pclass, ordered=T)
+df$Pclass <- factor(df$Pclass)
 df$Sex <- factor(df$Sex)
-df$SibSp <- factor(df$SibSp, ordered=T)
-df$Parch <- factor(df$Parch, ordered=T)
+df$SibSp <- factor(df$SibSp)
+df$Parch <- factor(df$Parch)
 df$Embarked <- factor(df$Embarked)
 
 df <- df %>%
   separate(Name, c('first_name', 'rest_name'), sep=', ', remove=F) %>%
   separate(rest_name, c('title_name', 'rest_name'), sep='\\.') %>%
-  mutate(title_name=factor(title_name))
   select(-rest_name)
+
+df$title_name[df$title_name %in% c('Capt', 'Col', 'Don', 'Dr', 'Jonkheer', 'Major', 'Rev', 'Sir')] <- 'Mr'
+df$title_name[df$title_name %in% c('Lady', 'Mme','the Countess')] <- 'Mrs'
+df$title_name[df$title_name %in% c('Mlle', 'Ms')] <- 'Miss'
+df$title_name <- factor(df$title_name)
+
+
 
 summary(df)
 
 
-df %>%
-  group_by(Ticket) %>%
-  summarize(n_ticket=n()) %>%
-  filter(n_ticket==1) %>%
-  select(Ticket) -> tmp
+df <- left_join(df, df %>%
+                  group_by(Ticket) %>%
+                  summarize(n_ticket=n())) %>%
+  mutate(n_ticket=factor(n_ticket))
 
 df <- df %>%
-  mutate(Child=factor(Age<=12))
-
-left_join(tmp, df) %>%
-  filter(SibSp==0, Parch==0, is.na(Age)) %>%
-  select(PassengerId) -> tmp
-
-df$Child[df$PassengerId %in% tmp$PassengerId] <- FALSE
-
+  mutate(Child=Age<=12)
 
 df %>%
   select(where(is.factor)) %>%
@@ -54,27 +55,38 @@ df %>%
   select(Survived, where(is.numeric), -PassengerId) %>%
   ggpairs(aes(color=Survived))
 
-df %>%
-  filter(is.na(Child)) %>%
-  filter(grepl('Mrs', Name)) %>%
-  select(PassengerId) -> tmp
 
-df$Child[df$PassengerId %in% tmp$PassengerId] <- FALSE
+df <- df %>%
+  mutate(Child=if_else(SibSp==0 & Parch==0 & is.na(Child) & n_ticket==1, FALSE, as.logical(Child))) %>%
+  mutate(Child=if_else(title_name=='Master' & is.na(Child), TRUE, as.logical(Child))) %>%
+  mutate(Child=if_else(title_name=='Mrs' & is.na(Child), FALSE, as.logical(Child))) %>%
+  mutate(Child=if_else(SibSp > '0' & Parch > '0' & is.na(Child), TRUE, as.logical(Child))) %>%
+  mutate(Child=if_else(is.na(Child), FALSE, as.logical(Child))) %>%
+  mutate(Child=factor(Child))
 
-df$Child[df$title_name=='Master'] <- TRUE
 
-df %>%
-  filter(is.na(Child)) %>%
-  filter(SibSp > '0', Parch > '0') %>%
-  select(PassengerId) -> tmp
-
-df$Child[df$PassengerId %in% tmp$PassengerId] <- TRUE
-
-df$Child[is.na(df$Child)] <- FALSE
 
 df %>%
-  filter(is.na(Child)) %>%
-  filter(Parch > '0')
+  select(Survived, where(is.factor)) %>%
+  pivot_longer(-Survived) %>%
+  group_by(name) %>%
+  summarize(phi=Phi(x=Survived, y=factor(value)), 
+            chisq.pvalue=chisq.test(Survived, factor(value))$p.value) %>%
+  mutate(`signif 95%`=chisq.pvalue < 0.05) %>%
+  arrange(chisq.pvalue) %>%
+  {.->>tmp} %>%
+  kable(format='html', digits=4, caption='<b>Phi y chisq.test</b>') %>%
+  kable_styling(full_width = F)
 
-df[df$first_name=='Bourke',]
-df$Child[594]
+df %>%
+  select(Survived, where(is.numeric), -PassengerId) %>%
+  pivot_longer(-Survived) %>%
+  group_by(name, Survived) %>%
+  summarize(value_list = list(value)) %>%
+  pivot_wider(names_from=Survived, values_from=value_list) %>%
+  mutate(vartest.pval=var.test(unlist(`0`), unlist(`1`))$p.val) %>%
+  mutate(ttest.pval=t.test(unlist(`0`), unlist(`1`), var.equal=vartest.pval>0.05)$p.val) %>%
+  mutate(`signif 95%`=ttest.pval < 0.05) %>%
+  select(-`0`, -`1`)  %>%
+  kable(format='html', digits=4, caption='<b>t.test</b>') %>%
+  kable_styling(full_width = F)
