@@ -2,20 +2,21 @@
 title: "Tipología y ciclo de vida de los datos. Práctica 2"
 author: "Baltasar Boix / Yago Ezcurra"
 date: "13/5/2021"
-output:
-  pdf_document:
-    highlight: zenburn
-    toc: yes
-  html_document:
-    highlight: default
-    number_sections: yes
-    theme: cosmo
-    toc: yes
-    toc_depth: 2
+output:  
+   pdf_document:  
+    toc: true  
+    number_sections: yes  
+linestretch: 1.0  
+
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
 ```
 
 \newpage  
@@ -27,7 +28,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ---
 
 
-```{r message= FALSE, warning=FALSE}
+```{r message= FALSE, warning=FALSE, size='footnotesize'}
 require(tidyverse)
 require(lares)
 require(GGally)
@@ -45,7 +46,7 @@ require(DescTools)
   
 ![Descripción del dataset obtenido en Kaggle](DataDescKaggle.jpg)  
   
-```{r message= FALSE, warning=FALSE, fig.height=6, fig.width=9}
+```{r message= FALSE, warning=FALSE, fig.height=6, fig.width=9, size='footnotesize'}
 
 df <- read_csv('../data/train.csv')
 
@@ -71,7 +72,7 @@ Simplificamos `title_name` en cuatro niveles.
 
 # Integración y selección de los datos de interés a analizar. 
 
-```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12}
+```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
 
 df <- df %>%
   mutate(Child=factor(Age<=12))
@@ -86,7 +87,8 @@ df <- df %>%
   separate(rest_name, c('title_name', 'rest_name'), sep='\\.') %>%
   select(-rest_name)
 
-df$title_name[df$title_name %in% c('Capt', 'Col', 'Don', 'Dr', 'Jonkheer', 'Major', 'Rev', 'Sir')] <- 'Mr'
+df$title_name[df$title_name %in% c('Capt', 'Col', 'Don', 'Dr', 'Jonkheer', 
+                                   'Major', 'Rev', 'Sir')] <- 'Mr'
 df$title_name[df$title_name %in% c('Lady', 'Mme','the Countess')] <- 'Mrs'
 df$title_name[df$title_name %in% c('Mlle', 'Ms')] <- 'Miss'
 df$title_name <- factor(df$title_name)
@@ -127,17 +129,21 @@ Sustituimos los NA's de la variable Child con los siguientes criterios:
 
 
 
-```{r message= FALSE, warning=FALSE}
+```{r message= FALSE, warning=FALSE, size='footnotesize'}
 
 df <- df %>%
-  mutate(Child=if_else(SibSp==0 & Parch==0 & is.na(Child) & n_ticket==1, FALSE, as.logical(Child))) %>%
-  mutate(Child=if_else(title_name=='Master' & is.na(Child), TRUE, as.logical(Child))) %>%
-  mutate(Child=if_else(title_name=='Mrs' & is.na(Child), FALSE, as.logical(Child))) %>%
-  mutate(Child=if_else(SibSp > '0' & Parch > '0' & is.na(Child), TRUE, as.logical(Child))) %>%
-  mutate(Child=if_else(is.na(Child), FALSE, as.logical(Child)))
+  mutate(Child = if_else(SibSp == 0 & Parch == 0 & is.na(Child) & n_ticket == 1, 
+                         FALSE, as.logical(Child) )) %>%
+  mutate(Child = if_else(title_name == 'Master' & is.na(Child), 
+                         TRUE, as.logical(Child))) %>%
+  mutate(Child = if_else(title_name == 'Mrs' & is.na(Child), 
+                         FALSE, as.logical(Child))) %>%
+  mutate(Child = if_else(SibSp > '0' & Parch > '0' & is.na(Child), 
+                         TRUE, as.logical(Child))) %>%
+  mutate(Child = if_else(is.na(Child), FALSE, as.logical(Child)))
 
 
-prop.table(table(df$Survived, df$Child, dnn=c('Survived', 'Child')), margin=2)
+prop.table(table(df$Survived, df$Child, dnn = c('Survived', 'Child')), margin = 2)
 
 ```
 
@@ -152,17 +158,17 @@ prop.table(table(df$Survived, df$Child, dnn=c('Survived', 'Child')), margin=2)
 
 ## Aplicación de pruebas estadísticas para comparar los grupos de datos. En función de los datos y el objetivo del estudio, aplicar pruebas de contraste de hipótesis, correlaciones, regresiones, etc. Aplicar al menos tres métodos de análisis diferentes.  
 
-```{r message= FALSE, warning=FALSE}
+```{r message= FALSE, warning=FALSE, size='footnotesize'}
 
 df %>%
   select(Survived, where(is.factor)) %>%
   pivot_longer(-Survived) %>%
   group_by(name) %>%
-  summarize(phi=Phi(x=Survived, y=factor(value)), 
+  summarize(cramerv=CramerV(x=Survived, y=factor(value)), 
             chisq.pvalue=chisq.test(Survived, factor(value))$p.value) %>%
   mutate(`signif 95%`=chisq.pvalue < 0.05) %>%
   arrange(chisq.pvalue) %>%
-  kable(format='latex', digits=4, caption='Phi y chisq.test') %>%
+  kable(format='latex', digits=4, caption='CramerV y chisq.test') %>%
   kable_styling(full_width = F, latex_options = "HOLD_position")
 
 df %>%
@@ -172,7 +178,8 @@ df %>%
   summarize(value_list = list(value)) %>%
   pivot_wider(names_from=Survived, values_from=value_list) %>%
   mutate(vartest.pval=var.test(unlist(`0`), unlist(`1`))$p.val) %>%
-  mutate(ttest.pval=t.test(unlist(`0`), unlist(`1`), var.equal=vartest.pval>0.05)$p.val) %>%
+  mutate(ttest.pval=t.test(unlist(`0`), unlist(`1`), 
+                           var.equal=vartest.pval>0.05)$p.val) %>%
   mutate(`signif 95%`=ttest.pval < 0.05) %>%
   select(-`0`, -`1`)  %>%
   kable(format='latex', digits=4, caption='t.test') %>%
