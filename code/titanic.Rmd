@@ -70,6 +70,8 @@ Separamos del `Name` el título (`title_name`) y el primer apellido (`first_name
 
 Simplificamos `title_name` en cuatro niveles.  
 
+Creamos la variable `Crew`. TRUE para la personas con Fare==0 que consideramos que viajan como tripulación.
+
 # Integración y selección de los datos de interés a analizar. 
 
 ```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
@@ -92,6 +94,10 @@ df$title_name[df$title_name %in% c('Capt', 'Col', 'Don', 'Dr', 'Jonkheer',
 df$title_name[df$title_name %in% c('Lady', 'Mme','the Countess')] <- 'Mrs'
 df$title_name[df$title_name %in% c('Mlle', 'Ms')] <- 'Miss'
 df$title_name <- factor(df$title_name)
+
+df <- df %>%
+  mutate(Crew=factor(if_else(Fare==0, TRUE, FALSE)))
+
 
 df %>%
   select(where(is.factor)) %>%

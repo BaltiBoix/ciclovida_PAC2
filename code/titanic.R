@@ -90,3 +90,28 @@ df %>%
   select(-`0`, -`1`)  %>%
   kable(format='html', digits=4, caption='<b>t.test</b>') %>%
   kable_styling(full_width = F)
+
+
+df %>%
+  mutate(Crew=if_else(Fare==0, TRUE, FALSE))
+
+df %>%
+  filter(Fare==0) %>%
+  group_by(Survived) %>%
+  summarize(n=n())
+
+df %>%
+  mutate(Fare_=if_else(Fare<10, round(Fare*2)/2, round(Fare))) %>%
+  group_by(Fare_, Survived) %>%
+  summarize(n=n()) %>%
+  pivot_wider(names_from=Survived, values_from=n) %>%
+  arrange(Fare_) -> tmp
+
+df %>%
+  filter(Fare>0) %>%
+  mutate(q=ntile(Fare,5)) %>%
+  group_by(Pclass, q, Survived) %>%
+  summarize(n=n()) %>%
+  pivot_wider(names_from=Survived, values_from=n) %>%
+  mutate(rate=`1`/(`0`+`1`))
+  
