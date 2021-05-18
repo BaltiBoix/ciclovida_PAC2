@@ -2,12 +2,14 @@
 title: "Tipología y ciclo de vida de los datos. Práctica 2"
 author: "Baltasar Boix / Yago Ezcurra"
 date: "13/5/2021"
-output:  
-   pdf_document:  
-    toc: true  
-    number_sections: yes  
-linestretch: 1.0  
-
+output:
+  pdf_document:
+    toc: yes
+    number_sections: yes
+  html_document:
+    toc: yes
+    df_print: paged
+linestretch: 1
 ---
 
 ```{r setup, include=FALSE}
@@ -46,9 +48,16 @@ require(DescTools)
   
 ![Descripción del dataset obtenido en Kaggle](DataDescKaggle.jpg)  
   
+\newpage  
+
+  
 ```{r message= FALSE, warning=FALSE, fig.height=6, fig.width=9, size='footnotesize'}
 
 df <- read_csv('../data/train.csv')
+df_t <- read_csv('../data/test.csv')
+
+df_t$Survived <- NA
+df <- bind_rows(df, df_t)
 
 df$Survived <- factor(df$Survived)
 df$Pclass <- factor(df$Pclass)
@@ -91,7 +100,7 @@ df <- df %>%
 
 df$title_name[df$title_name %in% c('Capt', 'Col', 'Don', 'Dr', 'Jonkheer', 
                                    'Major', 'Rev', 'Sir')] <- 'Mr'
-df$title_name[df$title_name %in% c('Lady', 'Mme','the Countess')] <- 'Mrs'
+df$title_name[df$title_name %in% c('Lady', 'Mme','the Countess', 'Dona')] <- 'Mrs'
 df$title_name[df$title_name %in% c('Mlle', 'Ms')] <- 'Miss'
 df$title_name <- factor(df$title_name)
 
@@ -144,9 +153,11 @@ df <- df %>%
                          TRUE, as.logical(Child))) %>%
   mutate(Child = if_else(title_name == 'Mrs' & is.na(Child), 
                          FALSE, as.logical(Child))) %>%
-  mutate(Child = if_else(SibSp > '0' & Parch > '0' & is.na(Child), 
+  mutate(Child = if_else(SibSp != '0' & Parch != '0' & is.na(Child), 
                          TRUE, as.logical(Child))) %>%
-  mutate(Child = if_else(is.na(Child), FALSE, as.logical(Child)))
+  mutate(Child = if_else(is.na(Child), FALSE, as.logical(Child))) %>%
+  mutate(Child=factor(Child))
+
 
 
 prop.table(table(df$Survived, df$Child, dnn = c('Survived', 'Child')), margin = 2)
@@ -164,10 +175,22 @@ prop.table(table(df$Survived, df$Child, dnn = c('Survived', 'Child')), margin = 
 
 ## Aplicación de pruebas estadísticas para comparar los grupos de datos. En función de los datos y el objetivo del estudio, aplicar pruebas de contraste de hipótesis, correlaciones, regresiones, etc. Aplicar al menos tres métodos de análisis diferentes.  
 
+Para determinar la asociación de la variable `Survived` con el resto de variables categóricas utilizamos el test $\chi^2$ y el coeficiente CramerV. 
+
+Para determinar la asociación de la variable `Survived` con las variables numéricas utilizaremos el t.test ($H_0$: la media del subset con `Survived==1` es igual a la media con `Survived==0`).
+
+Ajustamos un modelo GLM y minimizamos el Aic con la función `step` (búsqueda de las variables más significativas).  
+
+Los dos primeros métodos identifican la asociación de cada variable individualmente. GLM tiene en cuenta la colinearidad de las variables.  
+
+Las más significativas son: `Pclass`, `title_name`, `Age` y `n_ticket`.  
+
+
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
 
 df %>%
   select(Survived, where(is.factor)) %>%
+  filter(!is.na(Survived)) %>%
   pivot_longer(-Survived) %>%
   group_by(name) %>%
   summarize(cramerv=CramerV(x=Survived, y=factor(value)), 
@@ -179,6 +202,7 @@ df %>%
 
 df %>%
   select(Survived, where(is.numeric), -PassengerId) %>%
+  filter(!is.na(Survived)) %>%
   pivot_longer(-Survived) %>%
   group_by(name, Survived) %>%
   summarize(value_list = list(value)) %>%
@@ -190,6 +214,18 @@ df %>%
   select(-`0`, -`1`)  %>%
   kable(format='latex', digits=4, caption='t.test') %>%
   kable_styling(full_width = F, latex_options = "HOLD_position")
+
+
+# GLM
+df0 <- df %>%
+  select(-PassengerId, -Name, -first_name, -Ticket, -Cabin) %>%
+  na.omit()
+
+fit <- glm(data=df0, Survived ~ ., family=binomial(link = "logit"))
+
+step_fit <- step(fit, direction='both', trace=0)
+
+summary(step_fit)
 
 ```
 

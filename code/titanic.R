@@ -5,6 +5,10 @@ require(kableExtra)
 
 
 df <- read_csv('data/train.csv')
+df_t <- read_csv('data/test.csv')
+
+df_t$Survived <- NA
+df <- bind_rows(df, df_t)
 
 summary(df)
 
@@ -21,7 +25,7 @@ df <- df %>%
   select(-rest_name)
 
 df$title_name[df$title_name %in% c('Capt', 'Col', 'Don', 'Dr', 'Jonkheer', 'Major', 'Rev', 'Sir')] <- 'Mr'
-df$title_name[df$title_name %in% c('Lady', 'Mme','the Countess')] <- 'Mrs'
+df$title_name[df$title_name %in% c('Lady', 'Mme','the Countess', 'Dona')] <- 'Mrs'
 df$title_name[df$title_name %in% c('Mlle', 'Ms')] <- 'Miss'
 df$title_name <- factor(df$title_name)
 
@@ -60,7 +64,7 @@ df <- df %>%
   mutate(Child=if_else(SibSp==0 & Parch==0 & is.na(Child) & n_ticket==1, FALSE, as.logical(Child))) %>%
   mutate(Child=if_else(title_name=='Master' & is.na(Child), TRUE, as.logical(Child))) %>%
   mutate(Child=if_else(title_name=='Mrs' & is.na(Child), FALSE, as.logical(Child))) %>%
-  mutate(Child=if_else(SibSp > '0' & Parch > '0' & is.na(Child), TRUE, as.logical(Child))) %>%
+  mutate(Child=if_else(SibSp != '0' & Parch != '0' & is.na(Child), TRUE, as.logical(Child))) %>%
   mutate(Child=if_else(is.na(Child), FALSE, as.logical(Child))) %>%
   mutate(Child=factor(Child))
 
@@ -68,6 +72,7 @@ df <- df %>%
 
 df %>%
   select(Survived, where(is.factor)) %>%
+  filter(!is.na(Survived)) %>%
   pivot_longer(-Survived) %>%
   group_by(name) %>%
   summarize(phi=Phi(x=Survived, y=factor(value)), 
@@ -80,6 +85,7 @@ df %>%
 
 df %>%
   select(Survived, where(is.numeric), -PassengerId) %>%
+  filter(!is.na(Survived)) %>%
   pivot_longer(-Survived) %>%
   group_by(name, Survived) %>%
   summarize(value_list = list(value)) %>%
@@ -114,4 +120,18 @@ df %>%
   summarize(n=n()) %>%
   pivot_wider(names_from=Survived, values_from=n) %>%
   mutate(rate=`1`/(`0`+`1`))
+
+
+
+df0 <- df %>%
+  select(-PassengerId, -Name, -first_name, -Ticket, -Cabin) %>%
+  na.omit()
+
+fit <- glm(data=df0, Survived ~ ., family=binomial(link = "logit"))
+
+step_fit <- step(fit)
+  
+summary(step_fit)
+
+  
   
