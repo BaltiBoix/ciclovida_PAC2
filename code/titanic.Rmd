@@ -38,6 +38,7 @@ require(knitr)
 require(kableExtra)
 require(gridExtra)
 require(DescTools)
+require(caret)
 
 ```
 
@@ -104,9 +105,21 @@ df$title_name[df$title_name %in% c('Lady', 'Mme','the Countess', 'Dona')] <- 'Mr
 df$title_name[df$title_name %in% c('Mlle', 'Ms')] <- 'Miss'
 df$title_name <- factor(df$title_name)
 
+df <- left_join(df, df %>%
+                  group_by(Pclass, first_name) %>%
+                  summarize(n_name=n())) %>%
+  mutate(n_name=factor(n_name))
+
+df <- df %>%
+  mutate(deck=if_else(is.na(Cabin), 'N', str_sub(Cabin, 1, 1) )) %>%
+  mutate(deck=factor(deck))
+
+df$Fare[is.na(df$Fare)] <- df %>% filter(Pclass==3) %>% summarize(mean(Fare, na.rm=T)) %>% pull()
+
+df$Embarked[is.na(df$Embarked)] <- 'S'
+
 df <- df %>%
   mutate(Crew=factor(if_else(Fare==0, TRUE, FALSE)))
-
 
 df %>%
   select(where(is.factor)) %>%
@@ -233,3 +246,39 @@ summary(step_fit)
 # Representación de los resultados a partir de tablas y gráficas.  
 
 # Resolución del problema. A partir de los resultados obtenidos, ¿cuáles son las conclusiones? ¿Los resultados permiten responder al problema?  
+
+
+```{r message= FALSE, warning=FALSE, size='footnotesize'}
+
+df0 <- df %>%
+  select(-PassengerId, -Name, -Cabin) %>%
+  rowwise() %>%
+  mutate(Age=if_else(is.na(Age), if_else(as.logical(Child), runif(1, 0, 12), runif(1, 13, 60)), Age)) %>%
+  mutate(first_name=factor(first_name)) %>%
+  mutate(Ticket=factor(Ticket)) %>%
+  na.omit()
+
+set.seed(200560)
+train_control <- trainControl(method="cv", number=10)  
+
+# Fit the model 
+svm1 <- train(Survived ~ ., data = df0, method = 'svmLinear', trControl = train_control,
+             tuneGrid = expand.grid(C = seq(0, 2, length = 10)))  
+
+svm1
+
+confusionMatrix(predict(svm1), df0$Survived)
+
+df1 <- df %>%
+  rowwise() %>%
+  mutate(Age=if_else(is.na(Age), if_else(as.logical(Child), runif(1, 0, 12), runif(1, 13, 60)), Age)) %>%
+  filter(is.na(Survived))
+
+df1$Survived <- predict(svm1, df1)
+```
+
+```{r message= FALSE, warning=FALSE, size='footnotesize'}
+
+write_csv((df1 %>% select(PassengerId, Survived)), file='My_submission.csv')
+
+```

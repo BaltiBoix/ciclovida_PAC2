@@ -2,6 +2,7 @@ require(tidyverse)
 require(GGally)
 require(DescTools)
 require(kableExtra)
+require(caret)
 
 
 df <- read_csv('data/train.csv')
@@ -29,6 +30,10 @@ df$title_name[df$title_name %in% c('Lady', 'Mme','the Countess', 'Dona')] <- 'Mr
 df$title_name[df$title_name %in% c('Mlle', 'Ms')] <- 'Miss'
 df$title_name <- factor(df$title_name)
 
+df <- left_join(df, df %>%
+                  group_by(Pclass, first_name) %>%
+                  summarize(n_name=n())) %>%
+  mutate(n_name=factor(n_name))
 
 
 summary(df)
@@ -37,7 +42,11 @@ summary(df)
 df <- left_join(df, df %>%
                   group_by(Ticket) %>%
                   summarize(n_ticket=n())) %>%
-  mutate(n_ticket=factor(n_ticket))
+      mutate(n_ticket=factor(n_ticket))
+
+df <- df %>%
+  mutate(deck=if_else(is.na(Cabin), 'N', str_sub(Cabin, 1, 1) )) %>%
+  mutate(deck=factor(deck))
 
 df <- df %>%
   mutate(Child=Age<=12)
@@ -106,6 +115,10 @@ df %>%
   group_by(Survived) %>%
   summarize(n=n())
 
+df$Fare[is.na(df$Fare)] <- df %>% filter(Pclass==3) %>% summarize(mean(Fare, na.rm=T)) %>% pull()
+
+df$Embarked[is.na(df$Embarked)] <- 'S'
+
 df %>%
   mutate(Fare_=if_else(Fare<10, round(Fare*2)/2, round(Fare))) %>%
   group_by(Fare_, Survived) %>%
@@ -124,7 +137,17 @@ df %>%
 
 
 df0 <- df %>%
-  select(-PassengerId, -Name, -first_name, -Ticket, -Cabin) %>%
+  select(-PassengerId, -Name, -Cabin) %>%
+  rowwise() %>%
+  mutate(Age=if_else(is.na(Age), if_else(as.logical(Child), runif(1, 0, 12), runif(1, 13, 60)), Age)) %>%
+  mutate(first_name=factor(first_name)) %>%
+  mutate(Ticket=factor(Ticket)) %>%
+  na.omit()
+
+df0 <- df %>%
+  select(-PassengerId, -Name, -Cabin, -Ticket) %>%
+  rowwise() %>%
+  mutate(Age=if_else(is.na(Age), if_else(as.logical(Child), runif(1, 0, 12), runif(1, 13, 60)), Age)) %>%
   na.omit()
 
 fit <- glm(data=df0, Survived ~ ., family=binomial(link = "logit"))
@@ -133,5 +156,27 @@ step_fit <- step(fit)
   
 summary(step_fit)
 
-  
-  
+set.seed(200560)
+train_control <- trainControl(method="cv", number=3)  
+
+# Fit the model 
+svm1 <- train(Survived ~ ., data = df0, method = 'svmLinear', trControl = train_control,
+              tuneGrid = expand.grid(C = seq(0.5, 1.5, length = 3)))  
+
+svm1
+
+confusionMatrix(predict(svm1), df0$Survived)
+
+df1 <- df %>%
+  rowwise() %>%
+  mutate(Age=if_else(is.na(Age), if_else(as.logical(Child), runif(1, 0, 12), runif(1, 13, 60)), Age)) %>%
+  filter(is.na(Survived))
+
+df1 %>% select(-Survived, -Cabin) %>% filter_all(any_vars(is.na(.)))
+
+#df1$Survived <- predict(svm1, df1)
+
+write_csv((df1 %>% select(PassengerId, Survived)), file='My_submission.csv')
+
+
+
