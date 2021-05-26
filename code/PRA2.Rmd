@@ -98,7 +98,7 @@ A partir de los datos, se decide extraer información de las siguientes caracter
 - De las características `Cabin` se extraen el deck en el que estaba.
 - De las características `Fare` se extraen las personas que pertenecían a la tripulación (Fare==0).
 
-### Característica Nombre (Name)
+### Característica Child (Name)
 
 La variable nombre del pasajero podemos dividirla en el titulo y en el apellido.  Además, para facilitar el análisis simplificamos `title_name` en cuatro niveles. 
 Por ejemplo, el título del pasajero está contenido dentro de la variable de nombre del pasajero (Por ejemplo, 'Mr', 'Miss') y podemos usar el apellido para representar a las familias.
@@ -107,6 +107,16 @@ Por ejemplo, el título del pasajero está contenido dentro de la variable de no
 
 df <- df %>%
   mutate(Child=factor(Age<=12))
+```
+
+### Característica n_ticket (Ticket)
+
+```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
+df <- left_join(df, df %>%
+group_by(Ticket) %>%
+summarize(n_ticket=n())) %>%
+mutate(n_ticket=factor(n_ticket))
+
 ```
 
 ### Característica Nombre (Name)
@@ -129,8 +139,8 @@ df$title_name[df$title_name %in% c('Lady', 'Mme','the Countess', 'Dona')] <- 'Mr
 df$title_name[df$title_name %in% c('Mlle', 'Ms')] <- 'Miss'
 df$title_name <- factor(df$title_name)
 ```
-
-### Característica ticket (Ticket)
+   
+### Característica n_name (nº de pasajeros con el mismo apellido)   
 
 
 ```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
@@ -187,9 +197,9 @@ La gran mayoría de los atributos presentes se corresponden con las característ
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
 # Eliminamos las siguinetes columnas
-df$PassengerId <-NULL
-df$Name <-NULL
-df$Cabin <- NULL
+# df$PassengerId <-NULL
+# df$Name <-NULL
+# df$Cabin <- NULL
 
 ```
 
@@ -252,6 +262,9 @@ Para reemplazar el valor que nos falta de tarifa (`Fare`) se empleará un métod
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
 # Imputación de valores mediante la función kNN() del paquete VIM
 df$Fare<- kNN(df)$Fare
+df <- df %>%
+  mutate(Crew=factor(if_else(Fare==0, TRUE, FALSE)))
+
 ```
 
 ### Característica Edad
@@ -308,7 +321,7 @@ titanic.third <- df[df$Pclass == "3",]
 ## Comprobación de la normalidad y homogeneidad de la varianza. 
 
 de una población distribuida normalmente, utilizaremos la prueba de normalidad de Shapiro-Wilk, al tratarse de uno de los métodos más potentes para contrastar la normalidad.
-Asumiendo como hipótesis nula que la población está distribuida normalmente, si el p-valor es menor al nivel de significancia, generalmente $ \alpha= 0.05$, entonces la hipótesis nula es rechazada y se concluye que los datos no cuentan con una distribución normal.
+Asumiendo como hipótesis nula que la población está distribuida normalmente, si el p-valor es menor al nivel de significancia, generalmente $\alpha= 0.05$, entonces la hipótesis nula es rechazada y se concluye que los datos no cuentan con una distribución normal.
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
 # Shapiro-Wilk test para Age
@@ -338,15 +351,15 @@ A continuación, se muestra la aplicación del test Fligner-Killeen para caracte
 fligner.test(Fare ~ Survived, data = df)
 ```
 
-Puesto que obtenemos un p-valor inferior al nivel de significación ($\alpha=$ `r alpha`), rechazamos la hipótesis nula ($H_0$), es decir, podemos concluir que las varianzas son significativamente diferentes.
+Puesto que obtenemos un p-valor inferior al nivel de significación, rechazamos la hipótesis nula ($H_0$), es decir, podemos concluir que las varianzas son significativamente diferentes.
 
 
 
 ## Aplicación de pruebas estadísticas para comparar los grupos de datos. En función de los datos y el objetivo del estudio, aplicar pruebas de contraste de hipótesis, correlaciones, regresiones, etc. Aplicar al menos tres métodos de análisis diferentes.  
 
-Para determinar la asociación de la variable `Survived` con el resto de variables categóricas utilizamos el test $\chi^2$ y el coeficiente CramerV. 
+Para determinar la asociación de la variable `Survived` con el resto de variables categóricas utilizamos el test $\chi^2$ y el coeficiente CramerV. Según el test  $\chi^2$ todas las variables son significativas con un 95% de confianza. La bibliografía indica que un valor de CramerV > 0.1 es significativo. Las variables `Child` y `Crew` no lo cumplen por poco.  
 
-Para determinar la asociación de la variable `Survived` con las variables numéricas utilizaremos el t.test ($H_0$: la media del subset con `Survived==1` es igual a la media con `Survived==0`).
+Para determinar la asociación de la variable `Survived` con las variables numéricas utilizaremos el t.test ($H_0$: la media del subset con `Survived==1` es igual a la media con `Survived==0`). En el caso de las variables `Age` y `Fare` podemos descartar que tengan la misma media con un 95% de confianza.
 
 Ajustamos un modelo GLM y minimizamos el Aic con la función `step` (búsqueda de las variables más significativas).  
 
@@ -397,12 +410,16 @@ summary(step_fit)
 
 # Resolución del problema. A partir de los resultados obtenidos, ¿cuáles son las conclusiones? ¿Los resultados permiten responder al problema?  
 
+Claramente la supervivencia en el naufragio del Titanic se priorizó a las mujeres, los niños y a los pasajeros de primera clase.  
+
+El modelo SVM ajustado para participar en el concurso de Kaggle consigue una precisión aceptable (determinada por cross validation de 10 grupos).  
+
+Por último, generamos el fichero 'My_submission.csv' que mandaremos a Kaggle.  
+
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
 df0 <- df %>%
   select(-PassengerId, -Name, -Cabin) %>%
-  rowwise() %>%
-  mutate(Age=if_else(is.na(Age), if_else(as.logical(Child), runif(1, 0, 12), runif(1, 13, 60)), Age)) %>%
   mutate(first_name=factor(first_name)) %>%
   mutate(Ticket=factor(Ticket)) %>%
   na.omit()
@@ -414,8 +431,6 @@ svm1 <- train(Survived ~ ., data = df0, method = 'svmLinear', trControl = train_
 svm1
 confusionMatrix(predict(svm1), df0$Survived)
 df1 <- df %>%
-  rowwise() %>%
-  mutate(Age=if_else(is.na(Age), if_else(as.logical(Child), runif(1, 0, 12), runif(1, 13, 60)), Age)) %>%
   filter(is.na(Survived))
 df1$Survived <- predict(svm1, df1)
 ```
