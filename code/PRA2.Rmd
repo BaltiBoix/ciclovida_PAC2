@@ -48,17 +48,17 @@ library(VIM)
 # Descripción del dataset. ¿Por qué es importante y qué pregunta/problema pretende responder?  
 
 ## Lectura y analisis previo del dataset.  
-  
-![Descripción del dataset obtenido en Kaggle](DataDescKaggle.jpg)  
-  
-\newpage  
 
-  
 ```{r message= FALSE, warning=FALSE, fig.height=6, fig.width=9, size='footnotesize'}
+# Lectura de datos de entrenamiento y prueba
 df <- read_csv('../data/train.csv')
 df_t <- read_csv('../data/test.csv')
 df_t$Survived <- NA
+
+# Conjunto de datos completo
 df <- bind_rows(df, df_t)
+
+# Factorizamos las variables
 df$Survived <- factor(df$Survived)
 df$Pclass <- factor(df$Pclass)
 df$Sex <- factor(df$Sex)
@@ -66,50 +66,104 @@ df$SibSp <- factor(df$SibSp)
 df$Parch <- factor(df$Parch)
 df$Embarked <- factor(df$Embarked)
 summary(df)
-##df_str(df)
+df_str(df)
 ```
+
+El conjunto de datos objeto de análisis se ha obtenido a partir [Titanic](https://www.kaggle.com/c/titanic) que contiene datos sobre la supervivencia de pasajeros a bordo del Titanic. Los datos se han dividido en dos grupos:
+
+1. El conjunto de datos de entrenamiento (train.csv). Está constituido por 891 pasajeros (filas o registros) que presentan 12 características (columnas).
+2. El conjunto de datos de pruebas (test.csv). Está constituido por 418 pasajeros (filas o registros) que presentan 12 características (columnas).
+
+Los campos de este conjunto son los siguientes:
+
+  
+![Descripción del dataset obtenido en Kaggle](DataDescKaggle.jpg)  
+
+
+Para este trabajo se combinan los **datos de entrenamiento** y **datos de pruebas** en un único conjunto de datos. Por tanto, este conjunto de datos contiene 1309 registros y 12 características
+
+\newpage
+
+## Importancia y objetivos de los análisis. 
+
+A partir de este conjunto de datos se plantea la problemática de determinar qué variables influyen más sobre la supervivencia de los pasajeros a bordo del Titanic. Además, se podrá proceder a crear modelos de aprendizaje supervisado que permitan predecir la supervivencia de una persona en función de sus características y contrastes de hipótesis que ayuden a identificar propiedades interesantes en las muestras que puedan ser inferidas con respecto a la población.
 
 # Integración y selección de los datos de interés a analizar. 
 
-Creamos la variable dicotómica `Child` para diferenciar los niños de los adultos (>12años).  
+A partir de los datos, se decide extraer información de las siguientes características:
 
-Creamos la variable `n_ticket` con el número de peraonas que viajan con el mismo ticket.  
+- Creamos la variable dicotómica `Child` para diferenciar los niños de los adultos (>12años). 
+- De la característica `Name` se extraer el título y el apellido de la familia.
+- De la característica `Ticket`, se crea la variable `n_ticket` con el número de personas que viajan con el mismo ticket. .
+- De las características `Cabin` se extraen el deck en el que estaba.
+- De las características `Fare` se extraen las personas que pertenecían a la tripulación (Fare==0).
 
-Separamos del `Name` el título (`title_name`) y el primer apellido (`first_name`).  
+### Característica Nombre (Name)
 
-Simplificamos `title_name` en cuatro niveles.  
-
-Creamos la variable `Crew`. TRUE para la personas con Fare==0 que consideramos que viajan como tripulación.
-
-
+La variable nombre del pasajero podemos dividirla en el titulo y en el apellido.  Además, para facilitar el análisis simplificamos `title_name` en cuatro niveles. 
+Por ejemplo, el título del pasajero está contenido dentro de la variable de nombre del pasajero (Por ejemplo, 'Mr', 'Miss') y podemos usar el apellido para representar a las familias.
 
 ```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
+
 df <- df %>%
   mutate(Child=factor(Age<=12))
-df <- left_join(df, df %>%
-                  group_by(Ticket) %>%
-                  summarize(n_ticket=n())) %>%
-  mutate(n_ticket=factor(n_ticket))
+```
+
+### Característica Nombre (Name)
+
+La variable nombre del pasajero podemos dividirla en el titulo y en el apellido.  Además, para facilitar el análisis simplificamos `title_name` en cuatro niveles. 
+Por ejemplo, el título del pasajero está contenido dentro de la variable de nombre del pasajero (Por ejemplo, 'Mr', 'Miss') y podemos usar el apellido para representar a las familias.
+
+```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
+
 df <- df %>%
   separate(Name, c('first_name', 'rest_name'), sep=', ', remove=F) %>%
   separate(rest_name, c('title_name', 'rest_name'), sep='\\.') %>%
   select(-rest_name)
+
 df$title_name[df$title_name %in% c('Capt', 'Col', 'Don', 'Dr', 'Jonkheer', 
                                    'Major', 'Rev', 'Sir')] <- 'Mr'
+
 df$title_name[df$title_name %in% c('Lady', 'Mme','the Countess', 'Dona')] <- 'Mrs'
+
 df$title_name[df$title_name %in% c('Mlle', 'Ms')] <- 'Miss'
 df$title_name <- factor(df$title_name)
+```
+
+### Característica ticket (Ticket)
+
+
+```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
 df <- left_join(df, df %>%
                   group_by(Pclass, first_name) %>%
                   summarize(n_name=n())) %>%
   mutate(n_name=factor(n_name))
+```
+
+### Característica cabina (Cabin)
+
+
+```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
 df <- df %>%
-  mutate(deck=if_else(is.na(Cabin), 'N', str_sub(Cabin, 1, 1) )) %>%
-  mutate(deck=factor(deck))
-df$Fare[is.na(df$Fare)] <- df %>% filter(Pclass==3) %>% summarize(mean(Fare, na.rm=T)) %>% pull()
-df$Embarked[is.na(df$Embarked)] <- 'S'
+  mutate(Deck=if_else(is.na(Cabin), 'N', str_sub(Cabin, 1, 1) )) %>%
+  mutate(Deck=factor(Deck))
+```
+
+
+### Característica Tripulación (Crew)
+
+De la variable `Fare` se genera una nueva variable `Crew`. Esta variable diferencia a los pasajeros de los tripulantes, ya que los tripulantes no han pagado por ir en el barco.
+
+
+```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
 df <- df %>%
   mutate(Crew=factor(if_else(Fare==0, TRUE, FALSE)))
+```
+
+
+
+```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
+
 df %>%
   select(where(is.factor)) %>%
   na.omit() %>%
@@ -129,55 +183,48 @@ df %>%
 
 ## Selección de los datos de interes
 
-La gran mayoría de los atributos presentes se corresponden con las características que representan a todos los tripulantes del Titanic, por lo que será conveniente tenerlos en consideración durante la realización de los análisis. Sin embargo, podemos prescindir de los campos (PassengerId, Name, first_name, Cabin y Ticket) dado que no son atributos a los que se les ha extraído la información relevante en el paso anterior, por tanto, nos añadirían redundancia a la hora de resolver nuestro problema.
-
+La gran mayoría de los atributos presentes se corresponden con las características que representan a todos los tripulantes del Titanic, por lo que será conveniente tenerlos en consideración durante la realización de los análisis. Sin embargo, podemos prescindir de los campos (PassengerId, Name y Cabin) dado que no son atributos a los que se les ha extraído la información relevante en el paso anterior, por tanto, nos añadirían redundancia a la hora de resolver nuestro problema.
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
 # Eliminamos las siguinetes columnas
-#df$PassengerId <-NULL
-#df$Name <-NULL
-#df$Cabin <- NULL
+df$PassengerId <-NULL
+df$Name <-NULL
+df$Cabin <- NULL
+
 ```
 
 
 # Limpieza de los datos.  
 
-## ¿Los datos contienen ceros o elementos vacíos? ¿Cómo gestionarías cada uno de estos casos?  
+## Ceros o elementos vacíos  
 
-En primer lugar analizamos la cantidad de valores nulos que existen por cada atributo.
+En primer lugar, analizamos la cantidad de valores nulos que existen por cada atributo.
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
 # Números de valores desconocidos por campo
 sapply(df, function(x) sum(is.na(x)))
 ```
-Llegados a este punto debemos decidir cómo manejar estos registros que contienen valores desconocidos para algún campo. Una opción podría ser eliminar esos registros que incluyen este tipo de valores, pero ello supondría desaprovechar información. Por lo que aplicaremos a continuación distintas técnicas para imputar esos valores.
+Dado los resultados anteriores las características vemos que la variable `Survived` tiene 418 valores __NA__. Esto se debe a que esta característica no está en el conjunto de datos de prueba.
 
-Sustituimos los NA's de la variable Child con los siguientes criterios:
+Por tanto, las variables de interés que tienen valores perdidos ordenadas de mayor a menor son:  `Age`, `Embarked` y `Fare`.
 
-*     Asumimos que los viajeros con ticket unipersonal con SibSp==0 (sin hermanos o esposa a bordo) y Parch==0 (sin hermanos o padres a bordo) no son niños.
-
-*     Asumimos que las personas con title_name=='Mrs' (mujeres casadas) no son niños.  
-
-*     Asumimos que las personas con title_name=='Master' son niños.  
-
-*     Asumimos que las personas con SibSp>0 y Parch>0 son niños.
-
+### Característica Embarque
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
-df <- df %>%
-  mutate(Child = if_else(SibSp == 0 & Parch == 0 & is.na(Child) & n_ticket == 1, 
-                         FALSE, as.logical(Child) )) %>%
-  mutate(Child = if_else(title_name == 'Master' & is.na(Child), 
-                         TRUE, as.logical(Child))) %>%
-  mutate(Child = if_else(title_name == 'Mrs' & is.na(Child), 
-                         FALSE, as.logical(Child))) %>%
-  mutate(Child = if_else(SibSp != '0' & Parch != '0' & is.na(Child), 
-                         TRUE, as.logical(Child))) %>%
-  mutate(Child = if_else(is.na(Child), FALSE, as.logical(Child))) %>%
-  mutate(Child=factor(Child))
-prop.table(table(df$Survived, df$Child, dnn = c('Survived', 'Child')), margin = 2)
+df$Embarked[is.na(df$Embarked)] <- 'S'
 ```
-Por último, se empleará un método de imputación de valores basado en la similitud o diferencia entre los registros: la imputación basada en k vecinos más próximos (en inglés, kNN-imputation). La elección de esta alternativa se realiza bajo la hipótesis de que nuestros registros guardan cierta relación. No obstante, es mejor trabajar con datos “aproximados” que, con los propios elementos vacíos, ya que obtendremos análisis con menor margen de error.
+
+
+### Característica tarifa
+Para reemplazar el valor que nos falta de tarifa (`Fare`) se empleará un método de imputación de valores basado en la similitud o diferencia entre los registros: la imputación basada en k vecinos más próximos (en inglés, kNN-imputation). La elección de esta alternativa se realiza bajo la hipótesis de que nuestros registros guardan cierta relación. No obstante, es mejor trabajar con datos “aproximados” que, con los propios elementos vacíos, ya que obtendremos análisis con menor margen de error.
+
+```{r message= FALSE, warning=FALSE, size='footnotesize'}
+# Imputación de valores mediante la función kNN() del paquete VIM
+df$Fare<- kNN(df)$Fare
+```
+
+### Característica Edad
+Por último, para imputar los valores  __NA__ de la variable edad (`Age`), se empleara también una imputación de kNN.
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
 # Imputación de valores mediante la función kNN() del paquete VIM
@@ -205,32 +252,32 @@ Para los resultados de la característica edad (Age) los valores extremos son va
 
 Para los resultados de la característica tarifa (Fare) sí que vemos una mayor discrepancia en la distribución con precios 5 veces más grandes que la media. Estos valores están relacionados con la clase y el número de pasajeros. Por tanto, son valores que pueden darse.
 
+## Exportación de los datos preprocesados  
+
 # Análisis de los datos.   
 
 ## Selección de los grupos de datos que se quieren analizar/comparar (planificación de los análisis a aplicar). 
 
-A continuación, se seleccionan los grupos dentro de nuestro conjunto de datos que pueden resultar interesantes para analizar y/o comparar. En este caso nos interesa analizar las diferencias de supervivencia entre hombres y mujeres, distintas clases y si son niños o no.
+A continuación, se seleccionan los grupos dentro de nuestro conjunto de datos que pueden resultar interesantes para analizar y/o comparar. En este caso nos interesa analizar las diferencias de supervivencia entre hombres y mujeres y distintas clases.
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
 # Agrupación por sexo
 titanic.male <- df[df$Sex == "male",]
 titanic.female <- df[df$Sex == "female",]
+```
 
+
+```{r message= FALSE, warning=FALSE, size='footnotesize'}
 # Agrupación por clase
 titanic.first <- df[df$Pclass == "1",]
 titanic.second <- df[df$Pclass == "2",]
 titanic.third <- df[df$Pclass == "3",]
-
-# Agrupación por rango de edad
-titanic.child <- df[df$Child == TRUE,]
-titanic.adult <- df[df$Child == FALSE,]
 ```
-
 
 ## Comprobación de la normalidad y homogeneidad de la varianza. 
 
 de una población distribuida normalmente, utilizaremos la prueba de normalidad de Shapiro-Wilk, al tratarse de uno de los métodos más potentes para contrastar la normalidad.
-Asumiendo como hipótesis nula que la población está distribuida normalmente, si el p-valor es menor al nivel de significancia, generalmente $\alpha= 0.05$, entonces la hipótesis nula es rechazada y se concluye que los datos no cuentan con una distribución normal.
+Asumiendo como hipótesis nula que la población está distribuida normalmente, si el p-valor es menor al nivel de significancia, generalmente $ \alpha= 0.05$, entonces la hipótesis nula es rechazada y se concluye que los datos no cuentan con una distribución normal.
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
 # Shapiro-Wilk test para Age
@@ -239,7 +286,7 @@ shapiro.test(df$Age)
 # Shapiro-Wilk test para Fare
 shapiro.test(df$Fare)
 ```
-Dado los resultados anteriores,se observa que para la variable Age y la variable Fare consideradas sus correspondientes p-valores son inferiores al nivel de significación $\alpha= 0.05$. Por tanto, rechazamos la hipotesis nula y conluimos con un 95% de confianza que los datos no se distribuyen normalmente.
+Dado los resultados anteriores,se observa que para la variable Age y la variable Fare consideradas sus correspondientes p-valores son inferiores al nivel de significación $( \alpha= 0.05)$. Por tanto, rechazamos la hipotesis nula y conluimos con un 95% de confianza que los datos no se distribuyen normalmente.
 
 Seguidamente, pasamos a estudiar la homogeneidad de varianzas, mediante la aplicación de un test de Fligner-Killeen. Se trata de uun test no parametrico que compara las varianzas basandose en la mediana. Para realizar el test de Fligner-Killen se utiliza la funcion *fligner.test()*
 
@@ -260,15 +307,15 @@ A continuación, se muestra la aplicación del test Fligner-Killeen para caracte
 fligner.test(Fare ~ Survived, data = df)
 ```
 
-Puesto que obtenemos un p-valor inferior al nivel de significación, rechazamos la hipótesis nula ($H_0$), es decir, podemos concluir que las varianzas son significativamente diferentes.
+Puesto que obtenemos un p-valor inferior al nivel de significación ($\alpha=$ `r alpha`), rechazamos la hipótesis nula ($H_0$), es decir, podemos concluir que las varianzas son significativamente diferentes.
 
 
 
 ## Aplicación de pruebas estadísticas para comparar los grupos de datos. En función de los datos y el objetivo del estudio, aplicar pruebas de contraste de hipótesis, correlaciones, regresiones, etc. Aplicar al menos tres métodos de análisis diferentes.  
 
-Para determinar la asociación de la variable `Survived` con el resto de variables categóricas utilizamos el test $\chi^2$ y el coeficiente CramerV. Según el test  $\chi^2$ todas las variables son significativas con un 95% de confianza. La bibliografía indica que un valor de CramerV > 0.1 es significativo. Las variables `Child` y `Crew` no lo cumplen por poco.   
+Para determinar la asociación de la variable `Survived` con el resto de variables categóricas utilizamos el test $\chi^2$ y el coeficiente CramerV. 
 
-Para determinar la asociación de la variable `Survived` con las variables numéricas utilizaremos el t.test ($H_0$: la media del subset con `Survived==1` es igual a la media con `Survived==0`). En el caso de las variables `Age` y `Fare` podemos descartar que tengan la misma media con un 95% de confianza.
+Para determinar la asociación de la variable `Survived` con las variables numéricas utilizaremos el t.test ($H_0$: la media del subset con `Survived==1` es igual a la media con `Survived==0`).
 
 Ajustamos un modelo GLM y minimizamos el Aic con la función `step` (búsqueda de las variables más significativas).  
 
@@ -289,6 +336,7 @@ df %>%
   arrange(chisq.pvalue) %>%
   kable(format='latex', digits=4, caption='CramerV y chisq.test') %>%
   kable_styling(full_width = F, latex_options = "HOLD_position")
+
 df %>%
   select(Survived, where(is.numeric), -PassengerId) %>%
   filter(!is.na(Survived)) %>%
@@ -303,6 +351,7 @@ df %>%
   select(-`0`, -`1`)  %>%
   kable(format='latex', digits=4, caption='t.test') %>%
   kable_styling(full_width = F, latex_options = "HOLD_position")
+
 # GLM
 df0 <- df %>%
   select(-PassengerId, -Name, -first_name, -Ticket, -Cabin) %>%
@@ -316,12 +365,6 @@ summary(step_fit)
 # Representación de los resultados a partir de tablas y gráficas.  
 
 # Resolución del problema. A partir de los resultados obtenidos, ¿cuáles son las conclusiones? ¿Los resultados permiten responder al problema?  
-
-Claramente la supervivencia en el naufragio del Titanic se priorizó a las mujeres, los niños y a los pasajeros de primera clase.  
-
-El modelo SVM ajustado para participar en el concurso de Kaggle consigue una precisión aceptable (determinada por cross validation de 10 grupos).  
-
-Por último, generamos el fichero 'My_submission.csv' que mandaremos a Kaggle.  
 
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
