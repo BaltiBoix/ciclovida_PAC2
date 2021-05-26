@@ -208,6 +208,37 @@ Dado los resultados anteriores las características vemos que la variable `Survi
 
 Por tanto, las variables de interés que tienen valores perdidos ordenadas de mayor a menor son:  `Age`, `Embarked` y `Fare`.
 
+### Característica Child
+
+Llegados a este punto debemos decidir cómo manejar estos registros que contienen valores desconocidos para algún campo. Una opción podría ser eliminar esos registros que incluyen este tipo de valores, pero ello supondría desaprovechar información. Por lo que aplicaremos a continuación distintas técnicas para imputar esos valores.
+
+Sustituimos los NA's de la variable Child con los siguientes criterios:
+
+*     Asumimos que los viajeros con ticket unipersonal con SibSp==0 (sin hermanos o esposa a bordo) y Parch==0 (sin hermanos o padres a bordo) no son niños.
+
+*     Asumimos que las personas con title_name=='Mrs' (mujeres casadas) no son niños.  
+
+*     Asumimos que las personas con title_name=='Master' son niños.  
+
+*     Asumimos que las personas con SibSp>0 y Parch>0 son niños.
+
+
+```{r message= FALSE, warning=FALSE, size='footnotesize'}
+df <- df %>%
+  mutate(Child = if_else(SibSp == 0 & Parch == 0 & is.na(Child) & n_ticket == 1, 
+                         FALSE, as.logical(Child) )) %>%
+  mutate(Child = if_else(title_name == 'Master' & is.na(Child), 
+                         TRUE, as.logical(Child))) %>%
+  mutate(Child = if_else(title_name == 'Mrs' & is.na(Child), 
+                         FALSE, as.logical(Child))) %>%
+  mutate(Child = if_else(SibSp != '0' & Parch != '0' & is.na(Child), 
+                         TRUE, as.logical(Child))) %>%
+  mutate(Child = if_else(is.na(Child), FALSE, as.logical(Child))) %>%
+  mutate(Child=factor(Child))
+prop.table(table(df$Survived, df$Child, dnn = c('Survived', 'Child')), margin = 2)
+```
+
+
 ### Característica Embarque
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
