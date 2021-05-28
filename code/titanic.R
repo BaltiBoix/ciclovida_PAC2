@@ -178,5 +178,10 @@ df1 %>% select(-Survived, -Cabin) %>% filter_all(any_vars(is.na(.)))
 
 write_csv((df1 %>% select(PassengerId, Survived)), file='My_submission.csv')
 
+ggplot(svm1$results, aes(x=C, y=Accuracy)) + 
+  geom_point() + 
+  geom_line() + 
+  geom_errorbar(aes(ymin=Accuracy - 1.96*AccuracySD, ymax=Accuracy + 1.96*AccuracySD), color='blue') +
+  ggtitle ('Precisión vs factor Coste', subtitle='Rango 95% confianza')
 
 

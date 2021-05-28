@@ -93,7 +93,7 @@ A partir de este conjunto de datos se plantea la problemática de determinar qu�
 A partir de los datos, se decide extraer información de las siguientes características:
 
 - Creamos la variable dicotómica `Child` para diferenciar los niños de los adultos (>12años). 
-- De la característica `Name` se extraer el título y el apellido de la familia.
+- De la característica `Name` se extrae el título y el apellido de la familia.
 - De la característica `Ticket`, se crea la variable `n_ticket` con el número de personas que viajan con el mismo ticket. .
 - De las características `Cabin` se extraen el deck en el que estaba.
 - De las características `Fare` se extraen las personas que pertenecían a la tripulación (Fare==0).
@@ -170,8 +170,8 @@ df <- df %>%
   mutate(Crew=factor(if_else(Fare==0, TRUE, FALSE)))
 ```
 
-
-
+Representamos graficamente la variable dependiente `Survived` frente a cada valor posible de las variables categóricas. Podemos observar directamente que, por ejemplo, el `title_name` 'Mrs' tiene una supervivencia muy superior al la de 'Mr'.  
+  
 ```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
 
 df %>%
@@ -186,6 +186,13 @@ df %>%
     geom_bar(stat='identity', position='stack') +
     facet_grid(tipo ~ ., scale='free_y') +
     theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1))
+```
+
+El gráfico `pairs` nos muestra cómo se distribuyen las variables numéricas separando los subsets con `Survived` 1 y 0 (NA's para los pasajeros de 'test.csv'). Ya podemos observar que los pasajeros con `Fare` más alto tuvieron un porcentaje de superviviencia mayor).  
+  
+
+```{r message= FALSE, warning=FALSE, fig.height=10, fig.width=12, size='footnotesize'}
+
 df %>% 
   select(Survived, where(is.numeric), -PassengerId) %>%
   ggpairs(aes(color=Survived))
@@ -222,7 +229,7 @@ Por tanto, las variables de interés que tienen valores perdidos ordenadas de ma
 
 Llegados a este punto debemos decidir cómo manejar estos registros que contienen valores desconocidos para algún campo. Una opción podría ser eliminar esos registros que incluyen este tipo de valores, pero ello supondría desaprovechar información. Por lo que aplicaremos a continuación distintas técnicas para imputar esos valores.
 
-Sustituimos los NA's de la variable Child con los siguientes criterios:
+Sustituimos los NA's de la variable Child con los siguientes criterios aplicados consecutivamente:
 
 *     Asumimos que los viajeros con ticket unipersonal con SibSp==0 (sin hermanos o esposa a bordo) y Parch==0 (sin hermanos o padres a bordo) no son niños.
 
@@ -231,6 +238,8 @@ Sustituimos los NA's de la variable Child con los siguientes criterios:
 *     Asumimos que las personas con title_name=='Master' son niños.  
 
 *     Asumimos que las personas con SibSp>0 y Parch>0 son niños.
+
+*     Los no asignados anteriormente no son niños.
 
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
@@ -251,7 +260,12 @@ prop.table(table(df$Survived, df$Child, dnn = c('Survived', 'Child')), margin = 
 
 ### Característica Embarque
 
+Solo hay dos pasajeras que no tienen el puerto de embarque registrado. Comparten Ticket y camarote. Les asignamos el puerto en el que emnbarcaron más pasajeros. 
+
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
+
+df[is.na(df$Embarked),]
+table(df$Embarked)
 df$Embarked[is.na(df$Embarked)] <- 'S'
 ```
 
@@ -359,16 +373,20 @@ Puesto que obtenemos un p-valor inferior al nivel de significación, rechazamos 
 
 Para determinar la asociación de la variable `Survived` con el resto de variables categóricas utilizamos el test $\chi^2$ y el coeficiente CramerV. Según el test  $\chi^2$ todas las variables son significativas con un 95% de confianza. La bibliografía indica que un valor de CramerV > 0.1 es significativo. Las variables `Child` y `Crew` no lo cumplen por poco.  
 
-Para determinar la asociación de la variable `Survived` con las variables numéricas utilizaremos el t.test ($H_0$: la media del subset con `Survived==1` es igual a la media con `Survived==0`). En el caso de las variables `Age` y `Fare` podemos descartar que tengan la misma media con un 95% de confianza.
+Para determinar la asociación de la variable `Survived` con las variables numéricas utilizaremos el t.test ($H_0$: la media del subset con `Survived==1` es igual a la media con `Survived==0`). En el caso de las variables `Age` y `Fare` podemos descartar que tengan la misma media con un 95% de confianza. Previamente determinamos si la varianza de los subset pueden considerarse iguales. Son iguales en la variable `Age` y diferentes en la `Fare` (Utilizamos estos resultados en el cálculo del t.test).   
 
-Ajustamos un modelo GLM y minimizamos el Aic con la función `step` (búsqueda de las variables más significativas).  
+Ajustamos un modelo GLM y minimizamos el Aic con la función `step` (búsqueda de las variables más significativas). El modelo con menor Aic:  
+
+*          `Survived ~ Pclass + title_name + Age + SibSp + Parch + Fare + n_ticket + n_name`  
+
+El modelo consigue una precisión de un 83.8% sobre los datos de entrenamiento.
 
 Los dos primeros métodos identifican la asociación de cada variable individualmente. GLM tiene en cuenta la colinearidad de las variables.  
 
-Las más significativas son: `Pclass`, `title_name`, `Age` y `n_ticket`.  
 
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
+
 df %>%
   select(Survived, where(is.factor)) %>%
   filter(!is.na(Survived)) %>%
@@ -401,8 +419,11 @@ df0 <- df %>%
   select(-PassengerId, -Name, -first_name, -Ticket, -Cabin) %>%
   na.omit()
 fit <- glm(data=df0, Survived ~ ., family=binomial(link = "logit"))
-step_fit <- step(fit, direction='both', trace=0)
+step_fit <- step(fit, direction='both')
 summary(step_fit)
+
+confusionMatrix(factor(as.numeric(predict(step_fit, type='response')>0.5)), df0$Survived)
+
 ```
 
 
@@ -412,9 +433,13 @@ summary(step_fit)
 
 Claramente la supervivencia en el naufragio del Titanic se priorizó a las mujeres, los niños y a los pasajeros de primera clase.  
 
-El modelo SVM ajustado para participar en el concurso de Kaggle consigue una precisión aceptable (determinada por cross validation de 10 grupos).  
+El modelo SVM ajustado para participar en el concurso de Kaggle consigue una precisión aceptable (determinada por cross validation de 10 grupos).
 
-Por último, generamos el fichero 'My_submission.csv' que mandaremos a Kaggle.  
+La precisión calculada por cross-validation es de un 84.7%. Es decir se divide el dataset de training en 10 subsets sin elementos comunes. Se utilizan 9 para ajustar el modelo y el décimo para calcular la precisión. Se repite el proceso dejando fuera del ajuste un subset diferente cada vez. En el gráfico podemos ver la precisión para cada uno de los valores del Coste ensayados. El punto representa la media de las precisiones calculadas y la barra de error el rango del 95% de confianza.
+
+Si aplicamos el modelo ajustado al conjunto de los datos de training obtenemos una precisión del 98.9%. 
+
+Por último, generamos el fichero 'My_submission.csv' que mandaremos a Kaggle. Debemos esperar un rango de precisión con un 95% de confianza: (0.774, 0.921). El que nos reporta Kaggle: 0.78229.       
 
 
 ```{r message= FALSE, warning=FALSE, size='footnotesize'}
@@ -429,6 +454,15 @@ train_control <- trainControl(method="cv", number=10)
 svm1 <- train(Survived ~ ., data = df0, method = 'svmLinear', trControl = train_control,
              tuneGrid = expand.grid(C = seq(0, 2, length = 10)))  
 svm1
+
+ggplot(svm1$results, aes(x=C, y=Accuracy)) + 
+  geom_point() + 
+  geom_line() + 
+  geom_errorbar(aes(ymin=Accuracy - 1.96*AccuracySD, ymax=Accuracy + 1.96*AccuracySD), color='blue') +
+  ggtitle ('Precisión vs factor Coste', subtitle='Rango 95% confianza')
+
+cat('Rango de precisión esperada:', round(svm1$results[4,2]-1.96*svm1$results[4,4]*c(1, -1),3))
+
 confusionMatrix(predict(svm1), df0$Survived)
 df1 <- df %>%
   filter(is.na(Survived))
